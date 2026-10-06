@@ -37,6 +37,11 @@ class Telemetry:
     vent_running: bool
     drain_state: str
     environment_alarms: int
+    link_mode: str
+    devices_online: int
+    devices_offline: int
+    devices_jitter: int
+    linkages_paused: int
 
     def as_dict(self) -> dict[str, object]:
         return {
@@ -62,6 +67,11 @@ class Telemetry:
             "vent_running": self.vent_running,
             "drain_state": self.drain_state,
             "environment_alarms": self.environment_alarms,
+            "link_mode": self.link_mode,
+            "devices_online": self.devices_online,
+            "devices_offline": self.devices_offline,
+            "devices_jitter": self.devices_jitter,
+            "linkages_paused": self.linkages_paused,
         }
 
 
@@ -91,4 +101,9 @@ def collect(rt: "Runtime") -> Telemetry:
         vent_running=rt.ventilation.running(),
         drain_state=rt.drain.state_name(),
         environment_alarms=rt.env.alarm_count(),
+        link_mode=rt.link_monitor.mode(),
+        devices_online=rt.link_monitor.report().devices.online,
+        devices_offline=rt.link_monitor.report().devices.offline,
+        devices_jitter=rt.link_monitor.report().devices.jitter,
+        linkages_paused=len(rt.link_monitor.gate().paused_linkages()),
     )

@@ -7,6 +7,7 @@ import logging
 from socketserver import ThreadingMixIn
 from wsgiref.simple_server import WSGIServer, make_server
 
+from tunnelnet.link import Sweeper
 from .console.server import Server
 from .console.version import version_string
 from .store import Store
@@ -32,6 +33,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--store", default="data", help="directory holding the persistent records")
     parser.add_argument("--web-dir", default="web", help="directory holding the console pages")
     parser.add_argument("--addr", default=":8080", help="listen address as host:port")
+    parser.add_argument(
+        "--sweep-interval",
+        type=float,
+        default=5.0,
+        help="seconds between automatic link heartbeat sweeps (0 disables)",
+    )
     parser.add_argument("--version", action="store_true", help="print the build version and exit")
     return parser
 
@@ -46,10 +53,18 @@ def main(argv: list[str] | None = None) -> int:
     store = Store.open(args.store)
     host, port = parse_address(args.addr)
     application = Server(store, args.web_dir)
+    sweeper = (
+        Sweeper(application.runtime.link_monitor, args.sweep_interval).start()
+        if args.sweep_interval > 0
+        else None
+    )
     try:
         with make_server(host, port, application, server_class=ThreadingWSGIServer) as httpd:
             LOGGER.info("control console listening on %s:%d", host, port)
             httpd.serve_forever()
     except KeyboardInterrupt:
         LOGGER.info("control console stopped")
+    finally:
+        if sweeper is not None:
+            sweeper.stop()
     return 0

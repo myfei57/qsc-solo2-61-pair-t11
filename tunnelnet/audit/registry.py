@@ -3,10 +3,16 @@
 from __future__ import annotations
 
 import threading
+import time
+import uuid
 
 from .model import Record
 from .report import AuditState
 from .summary import count_by_event, summary
+
+
+def utc_stamp() -> str:
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
 
 class AuditRegistry:
@@ -20,6 +26,16 @@ class AuditRegistry:
         with self._lock:
             self._records.append(record)
         return record
+
+    def append_transition(self, event: str, ref: str = "", seq: int = 0) -> Record:
+        """Append a structured event plus its ``_ref`` twin, like the console does."""
+
+        stamp = utc_stamp()
+        primary = Record(id=uuid.uuid4().hex, event=event, at=stamp)
+        self.append(primary)
+        if ref:
+            self.append(Record(id=uuid.uuid4().hex, event=f"{event}_ref", at=stamp))
+        return primary
 
     def records(self) -> list[Record]:
         with self._lock:

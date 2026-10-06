@@ -9,6 +9,7 @@ from tunnelnet.cable import CableRegistry, MovingAverage
 from tunnelnet.drain import DrainService, PumpUnit
 from tunnelnet.env import Environment
 from tunnelnet.fire import FireService
+from tunnelnet.link import Clock, LinkMonitor, Transition
 from tunnelnet.ns import Registry as NamespaceRegistry
 from tunnelnet.patrol import PatrolService
 from tunnelnet.quota import QuotaService
@@ -17,6 +18,24 @@ from tunnelnet.vent import VentService
 
 DEFAULT_ZONES = ("zone-1", "zone-2", "zone-3")
 DEFAULT_THRESHOLD = 75.0
+
+
+class AuditTransitionSink:
+    """Fan link state transitions out to the shared audit registry.
+
+    Every transition is already persisted by the monitor under ``link_event``;
+    this sink mirrors it into the same in-memory audit trail the console audit
+    endpoints read, so there is one trail, not two diverging ones.
+    """
+
+    def __init__(self, audit: AuditRegistry) -> None:
+        self._audit = audit
+
+    def write(self, transition: Transition) -> None:
+        ref = f"{transition.target_id}#{transition.episode}:{transition.old}>{transition.new}"
+        if transition.reason:
+            ref = f"{ref} ({transition.reason})"
+        self._audit.append_transition(transition.event(), ref, seq=transition.seq)
 
 
 class Runtime:
@@ -41,3 +60,5 @@ class Runtime:
         self.power_book = PowerBook()
         self.quota = QuotaService(self.cabins, self.power_book)
         self.audit = AuditRegistry()
+        self.link_clock = Clock()
+        self.link_monitor = LinkMonitor(store, clock=self.link_clock, sink=AuditTransitionSink(self.audit))

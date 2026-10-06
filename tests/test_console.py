@@ -49,13 +49,13 @@ class ConsoleCase(unittest.TestCase):
         status, health = self.call("GET", "/api/health")
         self.assertEqual(status, 200)
         self.assertEqual(health["status"], "ok")
-        self.assertEqual(health["kinds"], [])
+        self.assertEqual(health["kinds"], ["device", "link"])
 
         status, checks = self.call("GET", "/api/health/checks")
         self.assertEqual(status, 200)
         self.assertEqual(
             {check["name"] for check in checks["checks"]},
-            {"store", "access", "drain", "ventilation", "fire", "patrol", "quota", "cables", "environment", "audit"},
+            {"store", "access", "drain", "ventilation", "fire", "patrol", "quota", "cables", "environment", "link", "audit"},
         )
 
         status, snapshot = self.call("GET", "/api/snapshot")
@@ -77,6 +77,7 @@ class ConsoleCase(unittest.TestCase):
                 "quota",
                 "cables",
                 "suppression",
+                "link",
                 "audit",
             },
         )

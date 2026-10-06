@@ -76,5 +76,28 @@ def run_checks(rt: "Runtime") -> list[dict[str, str]]:
         }
     )
 
+    monitor = rt.link_monitor
+    devices = monitor.devices()
+    offline = sum(1 for device in devices if device.state.value == "offline")
+    jitter = sum(1 for device in devices if device.state.value == "jitter")
+    unknown = sum(1 for device in devices if device.state.value == "unknown")
+    if monitor.mode() != "online":
+        link_status = "down"
+    elif unknown:
+        link_status = "warn"
+    else:
+        link_status = "ok"
+    checks.append(
+        {
+            "name": "link",
+            "status": link_status,
+            "detail": (
+                f"mode={monitor.mode()} devices={len(devices)} "
+                f"offline={offline} jitter={jitter} unknown={unknown} "
+                f"paused={len(monitor.gate().paused_linkages())}"
+            ),
+        }
+    )
+
     checks.append({"name": "audit", "status": "ok", "detail": f"records={rt.audit.count()}"})
     return checks

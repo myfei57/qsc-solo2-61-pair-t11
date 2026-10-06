@@ -38,6 +38,7 @@ def text_report(rt: "Runtime") -> str:
         f"quota: {describe['quota']}",
         f"cables: {describe['cables']}",
         f"suppression: {describe['suppression']}",
+        f"link: {describe['link']} mode={rt.link_monitor.mode()}",
         f"audit: {describe['audit']}",
         f"cable danger={telemetry.cable_danger} load_factor={load_factor(rt.cables):.4f}",
         f"drain pits={telemetry.pits} high={telemetry.high_pits} cycles={telemetry.cycles}",
@@ -57,7 +58,13 @@ def dashboard(rt: "Runtime") -> dict[str, object]:
 
     fire_report = rt.fire.report()
     quota_report = rt.quota.report()
+    link_report = rt.link_monitor.report()
     return {
+        "link": {
+            "mode": link_report.mode,
+            "devices": link_report.devices.as_dict(),
+            "paused": [item.key for item in link_report.paused],
+        },
         "namespaces": {"count": rt.namespaces.count()},
         "cabins": status_summary(rt.cabins).as_dict(),
         "cables": {

@@ -18,6 +18,11 @@ def seed_defaults(rt: Runtime) -> None:
     rt.namespaces.add("segment-a", "segment A")
     rt.namespaces.add("segment-b", "segment B")
 
+    if not rt.link_monitor.links():
+        rt.link_monitor.register_link("link-main", name="main corridor link")
+    for device_id in ("collector-1", "collector-2", "collector-3"):
+        rt.link_monitor.register_device(device_id, "link-main")
+
     for index, (cabin_id, zone, partition) in enumerate(
         (("cabin-1", "zone-1", "part-1"), ("cabin-2", "zone-2", "part-2"), ("cabin-3", "zone-3", "part-3")),
         start=1,

@@ -10,6 +10,14 @@ from tunnelnet.cable import danger_count, healthy_count, load_factor
 from tunnelnet.drain import Pit
 from tunnelnet.env import snapshot as env_snapshot
 from tunnelnet.fire import Detector
+from tunnelnet.link import (
+    DEFAULT_INTERVAL as DEFAULT_LINK_INTERVAL,
+    DEFAULT_MISS_THRESHOLD as DEFAULT_LINK_MISS,
+    DEFAULT_OFFLINE_RATIO as DEFAULT_LINK_RATIO,
+    DEFAULT_RECOVER_HITS as DEFAULT_LINK_HITS,
+    DEFAULT_RECOVER_STABLE_SECONDS as DEFAULT_LINK_STABLE,
+    summarize_devices,
+)
 from tunnelnet.ns import Stage, control_chain
 from tunnelnet.reporting import audit_export, telemetry_export, to_csv
 from tunnelnet.reporting import store_export as store_csv_export
@@ -657,6 +665,134 @@ def quota_add_usage(server: "Server", request: Request) -> Response:
         request.str_field("cabin_id"), request.float_field("watts")
     )
     return json_response({"usage": usage})
+
+
+def _optional_float(request: Request, field: str) -> float | None:
+    """Read a float field where ``None`` (absent/null) means "use the clock"."""
+
+    value = request.payload.get(field)
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise RequestError(400, f"{field} must be a number")
+    return float(value)
+
+
+def link_report(server: "Server", request: Request) -> Response:
+    return json_response(server.runtime.link_monitor.report().as_dict())
+
+
+def link_links(server: "Server", request: Request) -> Response:
+    link_id = request.query_field("id")
+    monitor = server.runtime.link_monitor
+    if link_id:
+        link = monitor.find_link(link_id)
+        if link is None:
+            raise RequestError(404, "link not found")
+        return json_response(monitor.link_view(link_id).as_dict())
+    return json_response({"items": [link.as_dict() for link in monitor.links()]})
+
+
+def link_devices(server: "Server", request: Request) -> Response:
+    monitor = server.runtime.link_monitor
+    devices = monitor.devices(request.query_field("link"))
+    return json_response(
+        {
+            "items": [device.as_dict() for device in devices],
+            "count": len(devices),
+            "summary": summarize_devices(devices).as_dict(),
+        }
+    )
+
+
+def link_events(server: "Server", request: Request) -> Response:
+    monitor = server.runtime.link_monitor
+    events = monitor.events()
+    scope = request.query_field("scope")
+    if scope:
+        events = [event for event in events if event.scope == scope]
+    return json_response({"items": [event.as_dict() for event in events], "count": len(events)})
+
+
+def link_linkages(server: "Server", request: Request) -> Response:
+    gate = server.runtime.link_monitor.gate()
+    key = request.query_field("key")
+    payload: dict[str, object] = {
+        "items": [item.as_dict() for item in gate.all()],
+        "paused": [item.key for item in gate.paused_linkages()],
+        "mode": server.runtime.link_monitor.mode(),
+    }
+    if key:
+        payload["allowed"] = gate.is_allowed(key)
+    return json_response(payload)
+
+
+def link_register(server: "Server", request: Request) -> Response:
+    monitor = server.runtime.link_monitor
+    link_id = request.str_field("link_id")
+    if link_id:
+        link = monitor.register_link(
+            link_id,
+            name=request.str_field("name"),
+            interval=request.float_field("interval", DEFAULT_LINK_INTERVAL),
+            miss_threshold=request.int_field("miss_threshold", DEFAULT_LINK_MISS),
+            recover_hits=request.int_field("recover_hits", DEFAULT_LINK_HITS),
+            offline_ratio=request.float_field("offline_ratio", DEFAULT_LINK_RATIO),
+            recover_stable_seconds=request.float_field("stable_seconds", DEFAULT_LINK_STABLE),
+        )
+        return json_response({"link": link.as_dict()})
+    device_id = request.str_field("device_id")
+    if not device_id:
+        raise RequestError(400, "link_id or device_id is required")
+    parent = request.str_field("on", "link-main")
+    device = monitor.register_device(device_id, parent)
+    return json_response({"device": device.as_dict()})
+
+
+def link_heartbeat(server: "Server", request: Request) -> Response:
+    monitor = server.runtime.link_monitor
+    device_id = request.str_field("device_id")
+    at = _optional_float(request, "at")
+    if device_id not in {d.id for d in monitor.devices()}:
+        raise RequestError(404, f"device {device_id} not registered")
+    device = monitor.heartbeat(device_id, at)
+    return json_response({"device": device.as_dict(), "mode": monitor.mode()})
+
+
+def link_sweep(server: "Server", request: Request) -> Response:
+    monitor = server.runtime.link_monitor
+    at = _optional_float(request, "at")
+    transitions = monitor.sweep(at)
+    return json_response(
+        {
+            "transitions": [event.as_dict() for event in transitions],
+            "mode": monitor.mode(),
+            "paused": [item.key for item in monitor.gate().paused_linkages()],
+        }
+    )
+
+
+def link_confirm(server: "Server", request: Request) -> Response:
+    monitor = server.runtime.link_monitor
+    link_id = request.str_field("link_id", "link-main")
+    force = bool(request.payload.get("force", False))
+    try:
+        result = monitor.confirm_recovery(link_id, force=force)
+    except ValueError as exc:
+        raise RequestError(409, str(exc))
+    record_event(server.runtime, "link_recovery_confirmed", link_id)
+    return json_response(result.as_dict())
+
+
+def link_rollback(server: "Server", request: Request) -> Response:
+    monitor = server.runtime.link_monitor
+    link_id = request.str_field("link_id", "link-main")
+    try:
+        result = monitor.rollback_recovery(link_id)
+    except ValueError as exc:
+        raise RequestError(404, str(exc))
+    record_event(server.runtime, "link_recovery_rolled_back", link_id)
+    return json_response(result.as_dict())
 
 
 def audit_list(server: "Server", request: Request) -> Response:
