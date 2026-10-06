@@ -49,13 +49,13 @@ class ConsoleCase(unittest.TestCase):
         status, health = self.call("GET", "/api/health")
         self.assertEqual(status, 200)
         self.assertEqual(health["status"], "ok")
-        self.assertEqual(health["kinds"], [])
+        self.assertIn("link-state", health["kinds"])
 
         status, checks = self.call("GET", "/api/health/checks")
         self.assertEqual(status, 200)
         self.assertEqual(
             {check["name"] for check in checks["checks"]},
-            {"store", "access", "drain", "ventilation", "fire", "patrol", "quota", "cables", "environment", "audit"},
+            {"store", "access", "drain", "ventilation", "fire", "patrol", "quota", "cables", "environment", "audit", "links"},
         )
 
         status, snapshot = self.call("GET", "/api/snapshot")
@@ -78,6 +78,7 @@ class ConsoleCase(unittest.TestCase):
                 "cables",
                 "suppression",
                 "audit",
+                "links",
             },
         )
 
@@ -555,7 +556,13 @@ class ConsoleCase(unittest.TestCase):
         self.assertEqual(body["zones"], ["zone-1", "zone-2", "zone-3"])
         self.assertTrue(body["alarm_raised"])
         self.assertEqual(body["usage"], 1300.0)
-        self.assertEqual(body["drain_runs"], 1)
+        # uplink not proven at boot: ordinary linkages are paused, but the
+        # fail-safe fire alarm still runs
+        self.assertEqual(body["drain_runs"], 0)
+        self.assertFalse(body["drain_started"])
+        self.assertIn("drain-auto", body["paused_linkages"])
+        self.assertIn("vent-auto", body["paused_linkages"])
+        self.assertTrue(body["degraded"])
         self.assertEqual(body["audit_count"], 4)
         self.assertEqual(body["last_stage"], "audit")
 

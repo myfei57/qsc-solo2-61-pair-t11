@@ -9,6 +9,7 @@ from tunnelnet.cable import CableRegistry, MovingAverage
 from tunnelnet.drain import DrainService, PumpUnit
 from tunnelnet.env import Environment
 from tunnelnet.fire import FireService
+from tunnelnet.link import LinkageGate, LinkMonitor, LinkRepository, RecordingActuator
 from tunnelnet.ns import Registry as NamespaceRegistry
 from tunnelnet.patrol import PatrolService
 from tunnelnet.quota import QuotaService
@@ -41,3 +42,7 @@ class Runtime:
         self.power_book = PowerBook()
         self.quota = QuotaService(self.cabins, self.power_book)
         self.audit = AuditRegistry()
+        self.link_repository = LinkRepository(store)
+        self.link_actuator = RecordingActuator()
+        self.links = LinkMonitor(self.link_repository, self.link_actuator)
+        self.link_gate = LinkageGate(self.links)

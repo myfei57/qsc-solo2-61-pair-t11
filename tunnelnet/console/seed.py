@@ -6,10 +6,58 @@ from tunnelnet.cabin import Cabin
 from tunnelnet.cable import Cable
 from tunnelnet.drain import Pit
 from tunnelnet.fire import Detector
+from tunnelnet.link import DeviceConfig, LinkConfig, Linkage
 
 from .runtime import Runtime
 
 SEED_AT = "2026-01-01T00:00:00Z"
+
+
+def seed_links(rt: Runtime) -> None:
+    """Register the default uplink, its collectors and gated linkages.
+
+    Configuration is idempotent: on a store that already holds link
+    documents this only makes sure the runtime states exist, it never
+    resets an operator's thresholds or a device's observed status.
+    """
+
+    config = LinkConfig(
+        id="uplink-main",
+        name="main collection uplink",
+        miss_limit=3,
+        heartbeat_period=10,
+        flap_window=60,
+        flap_limit=3,
+        offline_ratio=0.34,
+        stable_ticks=3,
+    )
+    rt.links.ensure_link(config)
+    for index in range(1, 4):
+        rt.links.ensure_device(
+            DeviceConfig(
+                id=f"collector-{index}",
+                link_id="uplink-main",
+                name=f"collector {index}",
+                critical=(index == 1),
+            )
+        )
+    rt.links.ensure_linkage(
+        Linkage(id="drain-auto", link_id="uplink-main", name="automatic sump drainage")
+    )
+    rt.links.ensure_linkage(
+        Linkage(id="vent-auto", link_id="uplink-main", name="automatic ventilation scheduling")
+    )
+    rt.links.ensure_linkage(
+        Linkage(
+            id="gas-alarm",
+            link_id="uplink-main",
+            name="gas / fire alarm",
+            fail_safe=True,
+        )
+    )
+    # Reconcile once so an unproven uplink boots with ordinary linkages
+    # already paused instead of reporting "normal" until the first timeout.
+    rt.links.tick("uplink-main")
 
 
 def seed_defaults(rt: Runtime) -> None:
@@ -54,3 +102,4 @@ def seed_defaults(rt: Runtime) -> None:
     rt.cables.sample("cable-1", 47.0)
 
     rt.patrol.rebuild_route()
+    seed_links(rt)

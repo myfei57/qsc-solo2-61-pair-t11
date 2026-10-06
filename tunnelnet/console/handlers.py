@@ -17,6 +17,7 @@ from tunnelnet.store import export_all, export_kind, list_approvals, revoke_appr
 
 from . import checks, ops
 from . import describe as describe_module
+from . import link_handlers
 from . import snapshot as snapshot_module
 from . import telemetry as telemetry_module
 from .audit_log import record_event
@@ -774,3 +775,57 @@ def export_telemetry(server: "Server", request: Request) -> Response:
 def export_store(server: "Server", request: Request) -> Response:
     columns, rows = store_csv_export(server.runtime.store)
     return csv_response(to_csv(columns, rows))
+
+
+# -- link monitoring -------------------------------------------------------
+
+def links_overview(server: "Server", request: Request) -> Response:
+    return link_handlers.links_overview(server, request)
+
+
+def links_policy(server: "Server", request: Request) -> Response:
+    return link_handlers.links_status_legend(server, request)
+
+
+def links_heartbeat(server: "Server", request: Request) -> Response:
+    return link_handlers.links_heartbeat(server, request)
+
+
+def links_tick(server: "Server", request: Request) -> Response:
+    return link_handlers.links_tick(server, request)
+
+
+def links_hold(server: "Server", request: Request) -> Response:
+    return link_handlers.links_hold(server, request)
+
+
+def links_release(server: "Server", request: Request) -> Response:
+    return link_handlers.links_release(server, request)
+
+
+def links_recover(server: "Server", request: Request) -> Response:
+    return link_handlers.links_recover(server, request)
+
+
+def links_audit(server: "Server", request: Request) -> Response:
+    return link_handlers.links_audit(server, request)
+
+
+def links_commands(server: "Server", request: Request) -> Response:
+    return link_handlers.links_commands(server, request)
+
+
+def links_episodes(server: "Server", request: Request) -> Response:
+    return link_handlers.links_episodes(server, request)
+
+
+def links_register_link(server: "Server", request: Request) -> Response:
+    return link_handlers.links_register_link(server, request)
+
+
+def links_register_device(server: "Server", request: Request) -> Response:
+    return link_handlers.links_register_device(server, request)
+
+
+def links_register_linkage(server: "Server", request: Request) -> Response:
+    return link_handlers.links_register_linkage(server, request)

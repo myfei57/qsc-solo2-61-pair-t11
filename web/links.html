@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Links</title>
+<style>
+body { font-family: system-ui, sans-serif; margin: 2rem; color: #1b1f24; }
+nav a { margin-right: 1rem; color: #0b5fff; text-decoration: none; }
+table { border-collapse: collapse; margin-top: 1rem; }
+th, td { border: 1px solid #d0d7de; padding: 0.4rem 0.75rem; text-align: left; vertical-align: top; }
+th { background: #f6f8fa; }
+.mode-normal { color: #1a7f37; font-weight: 600; }
+.mode-degraded, .mode-recovering { color: #b45309; font-weight: 600; }
+.status-offline, .status-jitter { color: #cf222e; font-weight: 600; }
+.status-suspect { color: #b45309; font-weight: 600; }
+.status-online { color: #1a7f37; }
+.gate-paused { color: #b45309; font-weight: 600; }
+.gate-active { color: #1a7f37; }
+button { padding: 0.25rem 0.75rem; margin-right: 0.4rem; }
+section { margin-bottom: 2.5rem; }
+code { background: #f6f8fa; padding: 0 0.25rem; }
+</style>
+</head>
+<body>
+<nav><a href="/cabins">Cabins</a><a href="/env">Environment</a><a href="/patrols">Patrols</a><a href="/alarms">Alarms</a><a href="/links">Links</a></nav>
+<h1>Link online monitoring</h1>
+<p>
+  Verdict policy: one missed heartbeat marks a device <code>suspect</code>; after
+  <code>miss_limit</code> consecutive misses it is <code>offline</code>; rapid drops are
+  <code>jitter</code>. Recovery is automatic after a stable window, unless an operator
+  hold is set. Console and audit read the same persisted documents.
+</p>
+<section id="links"></section>
+<section>
+  <h2>Recent link events</h2>
+  <table>
+    <thead><tr><th>Time</th><th>Entity</th><th>Event</th><th>Detail</th></tr></thead>
+    <tbody id="events"></tbody>
+  </table>
+</section>
+<script>
+function esc(value) {
+  return String(value ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+}
+async function getJSON(url, options) {
+  const response = await fetch(url, options);
+  return response.json();
+}
+function post(url, body) {
+  return getJSON(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+}
+function deviceRow(device) {
+  return `<tr>
+    <td>${esc(device.id)}</td>
+    <td class="status-${esc(device.status)}">${esc(device.status)}</td>
+    <td>${esc(device.note)}</td>
+    <td>${device.critical ? "critical" : ""}</td>
+  </tr>`;
+}
+function gateRow(gate) {
+  return `<tr>
+    <td>${esc(gate.id)}</td>
+    <td class="gate-${esc(gate.actual)}">${esc(gate.actual)}</td>
+    <td>${esc(gate.desired)}</td>
+    <td>${gate.fail_safe ? "fail-safe (never paused)" : ""}</td>
+  </tr>`;
+}
+async function load() {
+  const data = await getJSON("/api/links");
+  document.getElementById("links").innerHTML = data.links.map(entry => {
+    const link = entry.link, state = entry.state;
+    return `
+      <h2>${esc(link.name || link.id)}</h2>
+      <p>
+        link <strong class="mode-${esc(state.mode)}">${esc(state.mode)}</strong>
+        (availability ${esc(state.availability)}, stable ${state.stable_count}/${link.stable_ticks},
+        fence token ${state.fencing_token}${state.hold ? ", <strong>operator hold</strong>" : ""})<br>
+        <small>${esc(state.reason)}</small><br>
+        <small>miss_limit=${link.miss_limit}, heartbeat=${link.heartbeat_period}s, flap=${link.flap_limit} drops / ${link.flap_window}s, offline_ratio=${link.offline_ratio}</small>
+      </p>
+      <p>
+        <button onclick="hold('${esc(link.id)}')">Hold (stay degraded)</button>
+        <button onclick="release('${esc(link.id)}')">Release hold</button>
+        <button onclick="recover('${esc(link.id)}')">Manual recover</button>
+        <button onclick="tick('${esc(link.id)}')">Evaluate now</button>
+      </p>
+      <h3>Devices</h3>
+      <table>
+        <thead><tr><th>Device</th><th>Status</th><th>Detail</th><th>Critical</th></tr></thead>
+        <tbody>${entry.devices.map(deviceRow).join("")}</tbody>
+      </table>
+      <h3>Linkage gates</h3>
+      <table>
+        <thead><tr><th>Linkage</th><th>Actual</th><th>Desired</th><th>Note</th></tr></thead>
+        <tbody>${entry.linkages.map(gateRow).join("")}</tbody>
+      </table>`;
+  }).join("");
+
+  const audit = await getJSON("/api/links/audit?limit=30");
+  document.getElementById("events").innerHTML = audit.events.map(event =>
+    `<tr><td>${event.at}</td><td>${esc(event.entity_type)}:${esc(event.entity_id)}</td>
+     <td>${esc(event.kind)}</td><td>${esc(event.detail)}</td></tr>`).join("");
+}
+async function hold(linkId) {
+  const reason = prompt("Hold reason", "operator maintenance");
+  if (reason === null) return;
+  await post("/api/links/hold", { link_id: linkId, reason });
+  load();
+}
+async function release(linkId) { await post("/api/links/release", { link_id: linkId }); load(); }
+async function recover(linkId) { await post("/api/links/recover", { link_id: linkId }); load(); }
+async function tick(linkId) { await post("/api/links/tick", { link_id: linkId }); load(); }
+load();
+setInterval(load, 5000);
+</script>
+</body>
+</html>

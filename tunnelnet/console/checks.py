@@ -77,4 +77,19 @@ def run_checks(rt: "Runtime") -> list[dict[str, str]]:
     )
 
     checks.append({"name": "audit", "status": "ok", "detail": f"records={rt.audit.count()}"})
+
+    link_rows = []
+    degraded = 0
+    for entry in rt.links.snapshot()["links"]:
+        state = entry["state"]
+        link_rows.append(entry)
+        if state["mode"] != "normal":
+            degraded += 1
+    checks.append(
+        {
+            "name": "links",
+            "status": "warn" if degraded else "ok",
+            "detail": f"links={len(link_rows)} degraded={degraded}",
+        }
+    )
     return checks
